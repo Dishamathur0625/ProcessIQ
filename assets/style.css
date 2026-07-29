@@ -1,0 +1,88 @@
+/* ===========================
+   Global
+=========================== */
+
+.stApp {
+    background: #f5f7fb;
+}
+
+.block-container {
+    padding-top: 1rem;
+    padding-left: 2rem;
+    padding-right: 2rem;
+    max-width: 100%;
+}
+
+/* Hide Streamlit Menu */
+
+#MainMenu,
+footer,
+header {
+    visibility: hidden;
+}
+
+/* ===========================
+   Sidebar
+=========================== */
+
+[data-testid="stSidebar"]{
+    background:#081529;
+    width:280px;
+}
+
+[data-testid="stSidebarNav"]{
+    display:none;
+}
+
+.sidebar-title{
+
+    font-size:34px;
+    color:white;
+    font-weight:700;
+    margin-bottom:0px;
+
+}
+
+.sidebar-sub{
+
+    color:#b7c4d4;
+    font-size:14px;
+    margin-top:-8px;
+    margin-bottom:35px;
+
+}
+
+.sidebar-divider{
+
+    border-top:1px solid rgba(255,255,255,.08);
+    margin:20px 0;
+
+}
+
+/* ===========================
+Cards
+=========================== */
+
+.metric-card{
+
+    background:white;
+
+    border-radius:18px;
+
+    padding:22px;
+
+    box-shadow:0 2px 12px rgba(0,0,0,.08);
+
+}
+
+.section-card{
+
+    background:white;
+
+    border-radius:18px;
+
+    padding:20px;
+
+    box-shadow:0 2px 12px rgba(0,0,0,.08);
+
+}
