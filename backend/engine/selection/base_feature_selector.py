@@ -35,7 +35,7 @@ class BaseFeatureSelector(BaseOperation):
             if meta.feature_name in reasons:
                 meta.selection_reason = reasons[meta.feature_name]
                 
-    def _apply_selection(self, df: pd.DataFrame, selected_features: List[str], keep_originals: bool = True) -> pd.DataFrame:
+    def _apply_selection(self, df: pd.DataFrame, selected_features: List[str], original_features: Optional[List[str]] = None, keep_originals: bool = True) -> pd.DataFrame:
         """
         Filters the dataframe down to the selected features (and optionally keeps original source columns).
         """
@@ -43,9 +43,7 @@ class BaseFeatureSelector(BaseOperation):
         if self.target_variable and self.target_variable in df.columns:
             cols_to_keep.add(self.target_variable)
             
-        if keep_originals:
-            # We assume non-engineered features (those without metadata or original raw columns) might want to be kept.
-            # Real implementation would cross-reference the full dataset schema.
-            pass # Skipping complex logic for keeping originals for now to focus on selection logic
+        if keep_originals and original_features:
+            cols_to_keep.update(original_features)
             
         return df[list(cols_to_keep.intersection(df.columns))]
