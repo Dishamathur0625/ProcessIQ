@@ -1,4 +1,8 @@
+import os
 from pydantic_settings import BaseSettings
+
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_env_path = os.path.join(os.path.dirname(os.path.dirname(_current_dir)), ".env")
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "ProcessIQ Platform Services"
@@ -38,7 +42,7 @@ class Settings(BaseSettings):
     MAX_PARALLEL_JOBS: int = 4
     
     class Config:
-        env_file = ".env"
+        env_file = _env_path
         extra = "ignore"
 
 settings = Settings()

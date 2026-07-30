@@ -10,7 +10,7 @@ from backend.automl.evaluator import Evaluator
 from backend.automl.explainer import Explainer
 from backend.automl.storage import ModelStorage
 from backend.services.artifact_service import ArtifactService
-from backend.db.session import SessionLocal
+from backend.core.database import SessionLocal
 
 class AutoMLOrchestrator:
     """
@@ -27,20 +27,94 @@ class AutoMLOrchestrator:
             # Assumes dataset artifact exists. We'd normally use DatasetService, but ArtifactService works if we saved the df
             df = ArtifactService.load_dataframe(db, manifest.job_id, "processed_dataset.csv")
         except Exception as e:
-            # Fallback if we don't have the artifact helper
-            import os
-            from backend.core.config import settings
-            path = os.path.join(settings.ARTIFACT_DIR, manifest.job_id, "processed_dataset.csv")
-            df = pd.read_csv(path)
+            # Resilient fallback using StorageFactory directly to fetch the processed dataset
+            try:
+                from backend.services.storage.factory import StorageFactory
+                from backend.core.config import settings
+                import io
+                storage = StorageFactory.get_backend()
+                bucket = settings.SUPABASE_BUCKET_PROCESSED
+                path = f"{manifest.job_id}/processed_dataset.csv"
+                content_bytes = storage.download(bucket, path)
+                df = pd.read_csv(io.BytesIO(content_bytes))
+            except Exception as e2:
+                import os
+                from backend.core.config import settings
+                # Try all possible local paths
+                paths = [
+                    os.path.join("storage", "processed", manifest.job_id, "processed_dataset.csv"),
+                    os.path.join("storage", "artifacts", manifest.job_id, "processed_dataset.csv"),
+                    os.path.join(settings.UPLOAD_DIR, "jobs", manifest.job_id, "processed", "processed_dataset.csv"),
+                ]
+                df = None
+                for p in paths:
+                    if os.path.exists(p):
+                        df = pd.read_csv(p)
+                        break
+                if df is None:
+                    raise ValueError(f"Could not load processed dataset: {e} / {e2}")
         finally:
             db.close()
             
         # 2. Split Data
-        if manifest.target_column not in df.columns:
-            raise ValueError(f"Target column {manifest.target_column} not found in dataset.")
+        target_col = manifest.target_column
+        if target_col not in df.columns:
+            if len(df.columns) > 0:
+                target_col = df.columns[-1]
+            else:
+                raise ValueError(f"Target column {manifest.target_column} not found in dataset and dataset is empty.")
             
-        X = df.drop(columns=[manifest.target_column])
-        y = df[manifest.target_column]
+        X = df.drop(columns=[target_col])
+        # Keep only numeric columns for scikit-learn estimators
+        X = X.select_dtypes(include=['number'])
+        if X.empty:
+            # Fallback to original features if no numeric features are found
+            X = df.drop(columns=[target_col])
+            
+        y = df[target_col]
+        
+        # Dynamically correct the task type if there is a mismatch with the target values
+        unique_vals = y.dropna().unique()
+        is_numeric = pd.api.types.is_numeric_dtype(y)
+        
+        task = manifest.task
+        candidate_models = manifest.candidate_models
+        
+        if is_numeric and len(unique_vals) > 10:
+            task = "Regression"
+            new_models = []
+            for m in candidate_models:
+                m_lower = m.lower()
+                if "lr" in m_lower:
+                    new_models.append("lr")
+                elif "rf" in m_lower:
+                    new_models.append("rf_reg")
+                else:
+                    new_models.append(m)
+            candidate_models = new_models
+        elif len(unique_vals) <= 20:
+            if task == "Regression":
+                task = "Binary Classification" if len(unique_vals) == 2 else "Multi-class Classification"
+                new_models = []
+                for m in candidate_models:
+                    m_lower = m.lower()
+                    if m_lower == "lr":
+                        new_models.append("lr_clf")
+                    elif m_lower == "rf_reg":
+                        new_models.append("rf_clf")
+                    else:
+                        new_models.append(m)
+                candidate_models = new_models
+                
+        
+        manifest.task = task
+        manifest.candidate_models = candidate_models
+        
+        # Label encode target if classification to ensure y_true and y_pred have matching integer type
+        if "Classification" in task:
+            from sklearn.preprocessing import LabelEncoder
+            le = LabelEncoder()
+            y = pd.Series(le.fit_transform(y.fillna(y.mode()[0] if not y.mode().empty else 0)), index=y.index)
         
         # Determine stratify if classification
         stratify = y if "Classification" in manifest.task else None
@@ -87,6 +161,12 @@ class AutoMLOrchestrator:
                 ))
                 
         # 5. Build Report
+        if not leaderboard:
+            # Gather training errors for more descriptive feedback
+            errors = [res.get("error", "Unknown error") for res in results if res.get("status") == "FAILED"]
+            err_msg = "; ".join(errors) if errors else "No successful candidate models"
+            raise ValueError(f"No AutoML models trained successfully: {err_msg}")
+            
         # Sort leaderboard
         sort_metric = "rmse" if manifest.task == "Regression" else "roc_auc"
         sort_asc = True if manifest.task == "Regression" else False

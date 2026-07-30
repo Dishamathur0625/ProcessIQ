@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 
-from backend.api.deps import get_db
+from backend.core.database import get_db
 from backend.services.artifact_service import ArtifactService
 from backend.planner.target_detector import TargetDetector
 from backend.planner.task_detector import TaskDetector

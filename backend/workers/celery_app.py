@@ -16,3 +16,8 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
 )
+
+print(f"\n==================================================")
+print(f"⚙️ Celery Task Runner Started!")
+print(f"📦 STORAGE PROVIDER: {settings.STORAGE_PROVIDER.upper()}")
+print(f"==================================================\n")

@@ -23,6 +23,7 @@ class ExecutionManifest(BaseModel):
 
 class AutoMLStartRequest(BaseModel):
     job_id: str
+    target_column: Optional[str] = None
     training_plan_id: Optional[str] = None # If None, generate from latest plan
     parallel_jobs: int = 2
     random_seed: int = 42

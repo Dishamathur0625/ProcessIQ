@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 
-from backend.api.deps import get_db
+from backend.core.database import get_db
 from backend.schemas.automl import AutoMLStartRequest, AutoMLReport
 from backend.automl.manifest import ManifestGenerator
 from backend.automl.orchestrator import AutoMLOrchestrator
@@ -36,22 +36,40 @@ def run_automl_background(manifest_dict: dict):
 def start_automl(req: AutoMLStartRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     # 1. Get training plan
     try:
-        # In a real scenario with DB, we'd query TrainingPlan. 
-        # Here we mock it from the artifact storage directly to work around the db if needed.
-        # Actually, since it's an artifact in the user's workflow, we might not have it saved.
-        # Let's assume the frontend sends the plan or it's mocked.
-        # For this prototype, we'll construct a mock plan since the DB is down.
+        target_col = req.target_column or "target"
+        task = "Binary Classification"
+        models = [{"model_id": "lr_clf"}, {"model_id": "rf_clf"}]
+        
+        # Dynamically inspect dataset to determine task and models
+        try:
+            df = ArtifactService.load_dataframe(db, req.job_id, "processed_dataset.csv")
+            if target_col not in df.columns and len(df.columns) > 0:
+                target_col = df.columns[-1]
+                
+            unique_vals = df[target_col].dropna().unique()
+            import pandas as pd
+            is_numeric = pd.api.types.is_numeric_dtype(df[target_col])
+            
+            if is_numeric and len(unique_vals) > 10:
+                task = "Regression"
+                models = [{"model_id": "lr"}, {"model_id": "rf_reg"}]
+            elif len(unique_vals) <= 20:
+                task = "Binary Classification" if len(unique_vals) == 2 else "Multi-class Classification"
+                models = [{"model_id": "lr_clf"}, {"model_id": "rf_clf"}]
+        except Exception as e:
+            print(f"AutoML task detection fallback inspection failed: {e}")
+            
         training_plan = {
             "metadata": {"plan_id": "plan-123", "dataset_fingerprint": "fp-123", "planner_version": "1.0"},
             "configuration": {
-                "target_column": "target",
-                "task": "Binary Classification",
-                "recommended_models": [{"model_id": "lr_clf"}, {"model_id": "rf_clf"}],
-                "evaluation_strategy": {"metrics": ["accuracy"], "cross_validation": "5-Fold CV"}
+                "target_column": target_col,
+                "task": task,
+                "recommended_models": models,
+                "evaluation_strategy": {"metrics": ["accuracy" if "Classification" in task else "rmse"], "cross_validation": "5-Fold CV"}
             }
         }
-    except Exception:
-        raise HTTPException(status_code=404, detail="Training plan not found")
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Failed to initialize training plan: {str(e)}")
         
     settings = {
         "parallel_jobs": req.parallel_jobs,
@@ -77,7 +95,11 @@ def get_automl_status(job_id: str):
     if isinstance(session, dict) and session.get("status") in ["RUNNING", "FAILED"]:
         return session
         
-    return {"status": "COMPLETED", "best_model": session.best_model_id}
+    return {
+        "status": "COMPLETED",
+        "best_model": session.best_model_id,
+        "leaderboard": [m.dict() for m in session.leaderboard]
+    }
 
 @router.get("/{job_id}/leaderboard")
 def get_automl_leaderboard(job_id: str):

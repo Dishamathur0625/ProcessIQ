@@ -8,13 +8,78 @@ from backend.db.models.artifact import PipelineArtifact
 from backend.storage.file_manager import FileManager
 from backend.engine.core.pipeline_executor import PipelineExecutor
 from backend.engine.cleaning.imputation.mean_imputation import MeanImputation
+from backend.engine.cleaning.preprocessors.remove_duplicates import RemoveDuplicates
+from backend.engine.cleaning.scaling.min_max_scaler import MinMaxScaler
+from backend.engine.features.categorical.one_hot_generator import OneHotEncoderGenerator
 from backend.engine.reports.pipeline_report import PipelineReportGenerator
-from backend.engine.visualization.spec_generator import VisualizationSpecGenerator
+from backend.engine.visualization.spec_generator import VisualizationSpecificationGenerator
 
 import time
 import logging
+import json
 
 logger = logging.getLogger(__name__)
+
+# Helper to dynamically generate metadata artifacts for the Prediction Planner
+def generate_metadata_artifacts(df: pd.DataFrame, job_id: str):
+    import re
+    features = {}
+    row_count = len(df)
+    
+    for col in df.columns:
+        col_lower = col.lower()
+        is_id = col_lower == "id" or col_lower.endswith("_id") or (df[col].nunique() == row_count and row_count > 10)
+        
+        # Simple datetime detection
+        is_dt = pd.api.types.is_datetime64_any_dtype(df[col]) or "date" in col_lower or "time" in col_lower
+        
+        # Infer type
+        if is_dt:
+            inferred = "datetime"
+        elif pd.api.types.is_numeric_dtype(df[col]):
+            if pd.api.types.is_integer_dtype(df[col]):
+                inferred = "integer"
+            else:
+                inferred = "float"
+        elif df[col].nunique() < 20:
+            inferred = "categorical"
+        else:
+            inferred = "string"
+            
+        features[col] = {
+            "inferred_type": inferred,
+            "unique_count": int(df[col].nunique()),
+            "missing_ratio": float(df[col].isna().mean()),
+            "is_identifier": bool(is_id),
+            "is_datetime": bool(is_dt)
+        }
+        
+    feature_metadata = {
+        "row_count": row_count,
+        "features": features
+    }
+    
+    # Generate warnings for quality report
+    warnings = []
+    if row_count < 100:
+        warnings.append("Tiny dataset detected. Machine learning models may overfit.")
+    for col, meta in features.items():
+        if meta["missing_ratio"] > 0.0:
+            warnings.append(f"Column {col} has {meta['missing_ratio']*100:.1f}% missing values.")
+            
+    quality_report = {
+        "warnings": warnings
+    }
+    
+    # Generate fingerprint
+    from backend.engine.profiling.fingerprint import DatasetFingerprint
+    fingerprint_val = DatasetFingerprint.generate(df)
+    fingerprint = {
+        "dataset_fingerprint": fingerprint_val
+    }
+    
+    return feature_metadata, quality_report, fingerprint
+
 
 @celery_app.task(bind=True)
 def execute_pipeline_task(self, job_id: str, configuration: dict):
@@ -44,13 +109,23 @@ def execute_pipeline_task(self, job_id: str, configuration: dict):
         # 2. Setup Executor
         executor = PipelineExecutor(df)
         
-        # 3. Dynamic Pipeline configuration (Hardcoded for demo, would parse config here)
+        # 3. Dynamic Pipeline configuration
         ops = []
         if configuration.get("cleaning"):
-            # Example operation: would dynamically map via OperationRegistry in a real scenario
+            ops.append(RemoveDuplicates())
             numeric_cols = df.select_dtypes(include='number').columns.tolist()
             if numeric_cols:
                 ops.append(MeanImputation(target_columns=numeric_cols))
+                
+        if configuration.get("feature_engineering"):
+            numeric_cols = df.select_dtypes(include='number').columns.tolist()
+            if numeric_cols:
+                ops.append(MinMaxScaler(target_columns=numeric_cols))
+                
+            cat_cols = [col for col in df.columns if df[col].dtype == 'object' or df[col].dtype == 'category']
+            low_card_cats = [col for col in cat_cols if 1 < df[col].nunique() <= 20]
+            if low_card_cats:
+                ops.append(OneHotEncoderGenerator(target_columns=low_card_cats))
                 
         # 4. Execute Pipeline
         result = executor.execute_chain(ops)
@@ -66,7 +141,7 @@ def execute_pipeline_task(self, job_id: str, configuration: dict):
         
         # 6. Generate Reports
         if configuration.get("reports"):
-            report = PipelineReportGenerator.generate_full_report(result)
+            report = PipelineReportGenerator.generate_markdown(result)
             report_path = f"{job_id}/pipeline_report.md"
             storage.upload(settings.SUPABASE_BUCKET_REPORTS, report_path, io.BytesIO(report.encode('utf-8')))
             
@@ -86,7 +161,8 @@ def execute_pipeline_task(self, job_id: str, configuration: dict):
             # Quick hack to get visualizations for first numeric column
             numeric_cols = final_df.select_dtypes(include='number').columns.tolist()
             if numeric_cols:
-                viz_json = VisualizationSpecGenerator.generate_distribution_plot(final_df, numeric_cols[0])
+                viz_spec = VisualizationSpecificationGenerator.generate_spec(final_df, [numeric_cols[0]])
+                viz_json = viz_spec.dict() if viz_spec else {}
                 art_viz = PipelineArtifact(
                     job_id=job_id,
                     artifact_type="VISUALIZATION",
@@ -94,6 +170,39 @@ def execute_pipeline_task(self, job_id: str, configuration: dict):
                     content_json=viz_json
                 )
                 db.add(art_viz)
+                
+        # 7.5 Save Feature Metadata, Quality Report, Fingerprint for the Prediction Planner
+        feature_metadata, quality_report, fingerprint = generate_metadata_artifacts(final_df, job_id)
+        
+        metadata_path = f"{job_id}/feature_metadata.json"
+        quality_path = f"{job_id}/quality_report.json"
+        fingerprint_path = f"{job_id}/fingerprint.json"
+        
+        storage.upload(settings.SUPABASE_BUCKET_ARTIFACTS, metadata_path, io.BytesIO(json.dumps(feature_metadata).encode('utf-8')))
+        storage.upload(settings.SUPABASE_BUCKET_REPORTS, quality_path, io.BytesIO(json.dumps(quality_report).encode('utf-8')))
+        storage.upload(settings.SUPABASE_BUCKET_ARTIFACTS, fingerprint_path, io.BytesIO(json.dumps(fingerprint).encode('utf-8')))
+        
+        art_meta = PipelineArtifact(
+            job_id=job_id,
+            artifact_type="feature_metadata",
+            name="feature_metadata.json",
+            content_json=feature_metadata
+        )
+        art_quality = PipelineArtifact(
+            job_id=job_id,
+            artifact_type="quality_report",
+            name="quality_report.json",
+            content_json=quality_report
+        )
+        art_fingerprint = PipelineArtifact(
+            job_id=job_id,
+            artifact_type="fingerprint",
+            name="fingerprint.json",
+            content_json=fingerprint
+        )
+        db.add(art_meta)
+        db.add(art_quality)
+        db.add(art_fingerprint)
                 
         # 8. Mark Completed
         end_time = time.time()

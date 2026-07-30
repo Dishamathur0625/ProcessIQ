@@ -8,8 +8,14 @@ class LocalStorageBackend(StorageBackend):
     Implements local file system storage.
     """
     
-    def __init__(self, base_dir: str = "storage"):
-        self.base_dir = base_dir
+    def __init__(self, base_dir: str = None):
+        if base_dir is None:
+            # Resolve relative to the project root directory (which is 4 levels up from this file)
+            current_file = os.path.abspath(__file__)
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file))))
+            self.base_dir = os.path.join(project_root, "storage")
+        else:
+            self.base_dir = os.path.abspath(base_dir)
         os.makedirs(self.base_dir, exist_ok=True)
         
     def _get_full_path(self, bucket: str, path: str) -> str:

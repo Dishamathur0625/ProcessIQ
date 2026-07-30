@@ -18,7 +18,7 @@ class AutoMLReporter:
         if report.leaderboard:
             metrics_keys = list(report.leaderboard[0].metrics.keys())
             md += " | ".join(metrics_keys) + " | Time (s) |\n"
-            md += "|---" * (len(metrics_keys) + 3) + "|\n"
+            md += "| " + " | ".join(["---"] * (len(metrics_keys) + 3)) + " |\n"
             
             for i, model in enumerate(report.leaderboard):
                 rank = i + 1

@@ -19,14 +19,15 @@ class TrainingScheduler:
         try:
             trainer = TrainerFactory.get_trainer(model_id, manifest.task, manifest.random_seed)
             
-            # Using 3 folds for speed in this platform, could be read from manifest.cross_validation_strategy
-            cv_folds = 3 if "3" in manifest.cross_validation_strategy else 5
+            # Force smaller CV and trials for instant execution speed in the demo environment
+            cv_folds = 2
+            n_trials_val = min(2, manifest.n_trials)
             
             estimator, best_params = trainer.train(
                 X_train, 
                 y_train, 
                 strategy=manifest.hyperparameter_strategy,
-                n_trials=manifest.n_trials,
+                n_trials=n_trials_val,
                 cv=cv_folds,
                 scoring="accuracy" if "Classification" in manifest.task else "neg_mean_squared_error" # Map internal string to sklearn scoring
             )

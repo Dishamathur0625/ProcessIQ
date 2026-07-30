@@ -6,13 +6,18 @@ from backend.core.config import settings
 from backend.core.database import engine, Base
 
 # Import routers
-from backend.api.v1 import health, datasets, jobs, artifacts, copilot
+from backend.api.v1 import health, datasets, jobs, artifacts, copilot, planner, automl
 
 # Configure structured logging
 logging.basicConfig(level=settings.LOG_LEVEL, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
 # Create tables for v1
 Base.metadata.create_all(bind=engine)
+
+print(f"\n==================================================")
+print(f"🚀 ProcessIQ Platform Services Started!")
+print(f"📦 STORAGE PROVIDER: {settings.STORAGE_PROVIDER.upper()}")
+print(f"==================================================\n")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

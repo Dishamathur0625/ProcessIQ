@@ -12,7 +12,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { ArrowRight, CheckCircle2, Download, AlertTriangle, Target, BrainCircuit, Activity, LineChart, FileJson } from "lucide-react";
 
-export function PredictionPlanner({ jobId }: { jobId: string }) {
+export function PredictionPlanner({ jobId, onProceed }: { jobId: string, onProceed?: () => void }) {
   const { toast } = useToast();
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [trainingPlan, setTrainingPlan] = useState<any>(null);
@@ -37,6 +37,7 @@ export function PredictionPlanner({ jobId }: { jobId: string }) {
 
   const handleConfirmTarget = (target: string) => {
     setSelectedTarget(target);
+    localStorage.setItem(`target_column_${jobId}`, target);
     generatePlanMutation.mutate(target);
   };
 
@@ -169,11 +170,10 @@ export function PredictionPlanner({ jobId }: { jobId: string }) {
               <Button onClick={handleExportPlan} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white">
                 <FileJson className="w-4 h-4 mr-2" /> Export Training Plan
               </Button>
-              <Button disabled className="flex-1" variant="outline">
+              <Button onClick={onProceed} className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-50 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium">
                 Proceed to AutoML <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </div>
-            <p className="text-center text-xs text-zinc-400">Proceed to AutoML is reserved for Phase 14.</p>
           </div>
         )}
       </CardContent>

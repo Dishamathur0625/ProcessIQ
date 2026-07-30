@@ -55,11 +55,13 @@ export function CopilotDrawer({ jobId }: { jobId: string }) {
 
   return (
     <Sheet>
-      <SheetTrigger>
-        <Button variant="outline" className="gap-2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800">
-          <Bot className="w-4 h-4" /> Copilot
-        </Button>
-      </SheetTrigger>
+      <SheetTrigger
+        render={
+          <Button variant="outline" className="w-full h-11 gap-2 bg-indigo-50/50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800">
+            <Bot className="w-4 h-4" /> Analyze with AI Copilot
+          </Button>
+        }
+      />
       <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">

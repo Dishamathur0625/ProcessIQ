@@ -33,5 +33,7 @@ class JobService:
             "status": job.status,
             "created_at": job.created_at,
             "completed_at": job.completed_at,
+            "execution_time_ms": job.execution_time_ms,
+            "memory_usage_mb": job.memory_usage_mb,
             "error_message": job.error_message
         }

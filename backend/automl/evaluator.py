@@ -20,7 +20,7 @@ class Evaluator:
             metrics["mae"] = float(mean_absolute_error(y_true, y_pred))
             metrics["r2"] = float(r2_score(y_true, y_pred))
         else:
-            is_binary = task == "Binary Classification"
+            is_binary = len(np.unique(y_true)) <= 2
             avg = "binary" if is_binary else "macro"
             
             metrics["accuracy"] = float(accuracy_score(y_true, y_pred))

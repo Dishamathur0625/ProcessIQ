@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from backend.core.config import settings
-from backend.db.session import engine
+from backend.core.database import engine
 import redis
 from datetime import datetime
 

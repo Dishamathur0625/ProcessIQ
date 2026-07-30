@@ -59,8 +59,9 @@ export default function UploadPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
-      if (!file.name.endsWith(".csv")) {
-          toast({ variant: "destructive", title: "Invalid file", description: "Please select a .csv file" });
+      const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
+      if (![".csv", ".xlsx", ".xls"].includes(ext)) {
+          toast({ variant: "destructive", title: "Invalid file", description: "Please select a .csv or Excel file (.xlsx, .xls)" });
           return;
       }
       setSelectedFile(file);
@@ -81,7 +82,7 @@ export default function UploadPage() {
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Upload Dataset</h1>
-        <p className="text-zinc-500">Submit a CSV dataset to initiate the deterministic Analytics Engine.</p>
+        <p className="text-zinc-500">Submit a CSV or Excel dataset to initiate the deterministic Analytics Engine.</p>
       </div>
 
       <Card>
@@ -94,13 +95,13 @@ export default function UploadPage() {
           <div className="border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg p-12 text-center hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors relative">
             <input 
               type="file" 
-              accept=".csv" 
+              accept=".csv, .xlsx, .xls" 
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
               onChange={handleFileChange}
             />
             <div className="flex flex-col items-center gap-2 text-zinc-500">
               <UploadCloud className="w-10 h-10 mb-2" />
-              <p className="font-medium">Click or drag CSV file to this area to upload</p>
+              <p className="font-medium">Click or drag CSV or Excel file to this area to upload</p>
               <p className="text-sm">Maximum file size 500MB</p>
             </div>
           </div>
@@ -126,16 +127,16 @@ export default function UploadPage() {
               {uploadMutation.isPending ? "Uploading..." : "Upload Dataset"}
             </Button>
           ) : (
-            <div className="flex flex-col gap-4">
-              <CopilotDrawer jobId={datasetId} />
+            <div className="flex flex-col gap-3">
               <Button 
-                variant="outline"
-                className="w-full" 
+                className="w-full h-12 text-lg font-medium" 
                 onClick={() => pipelineMutation.mutate(datasetId)}
                 disabled={pipelineMutation.isPending}
               >
-                Or Run Default Pipeline Directly
+                {pipelineMutation.isPending ? "Starting Pipeline..." : "Run Preprocessing Pipeline"}
               </Button>
+              <div className="text-center text-sm text-zinc-400 font-medium">— or customize with AI —</div>
+              <CopilotDrawer jobId={datasetId} />
             </div>
           )}
 

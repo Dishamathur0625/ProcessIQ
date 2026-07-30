@@ -30,9 +30,9 @@ class SklearnTrainer(BaseTrainer):
     def get_hyperparameter_grid(self) -> Dict[str, list]:
         if "rf" in self.model_id:
             return {
-                "n_estimators": [50, 100, 200],
-                "max_depth": [None, 10, 20],
-                "min_samples_split": [2, 5, 10]
+                "n_estimators": [5, 10, 20],
+                "max_depth": [None, 5, 10],
+                "min_samples_split": [2, 5]
             }
         elif "lr_clf" in self.model_id:
             return {

@@ -5,7 +5,8 @@ import { getJobStatus } from "@/services/job";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle2, Circle, Loader2 } from "lucide-react";
+import { CheckCircle2, Circle, Loader2, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 
 const STAGES = [
@@ -40,6 +41,32 @@ export default function ProcessingPage() {
         }, 1500); // short delay to show completion animation
     }
   }, [job?.status, id, router]);
+
+  if (job?.status === "FAILED") {
+    return (
+      <div className="max-w-md mx-auto space-y-6 pt-16 text-center">
+        <Card className="border-red-200/80 dark:border-red-900/50 bg-red-50/50 dark:bg-red-950/20">
+          <CardHeader className="flex flex-col items-center gap-2">
+            <AlertCircle className="w-12 h-12 text-red-500 animate-pulse" />
+            <CardTitle className="text-xl text-red-700 dark:text-red-400 font-bold">Pipeline Execution Failed</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
+              {job.error_message || "An unexpected error occurred during processing."}
+            </p>
+            <div className="pt-2">
+              <Button 
+                onClick={() => router.push("/upload")}
+                className="w-full bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm transition-all"
+              >
+                Go Back & Upload Again
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const currentStageIndex = STAGES.indexOf(job?.status || "QUEUED");
 

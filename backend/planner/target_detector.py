@@ -80,4 +80,15 @@ class TargetDetector:
         for c in candidates:
             del c["score"]
             
+        # Fallback: if no candidates were found, offer all columns to avoid locking the user
+        if not candidates:
+            for col_name, meta in features.items():
+                dtype = meta.get("inferred_type", "unknown")
+                predicted_task = "Regression" if dtype in ["float", "integer", "numeric"] else "Binary Classification"
+                candidates.append({
+                    "column": col_name,
+                    "predicted_task": predicted_task,
+                    "confidence": 0.50
+                })
+            
         return {"candidates": candidates}

@@ -16,9 +16,10 @@ export function AutoMLDashboard({ jobId }: { jobId: string }) {
   const { data: statusData, refetch: refetchStatus } = useQuery({
     queryKey: ["automlStatus", jobId],
     queryFn: () => getAutoMLStatus(jobId),
-    refetchInterval: (data) => {
-        if (!data) return 5000;
-        return data.status === "RUNNING" ? 3000 : false;
+    refetchInterval: (query) => {
+        const state = query.state?.data?.status;
+        if (state === "COMPLETED" || state === "FAILED") return false;
+        return 1000;
     }
   });
 
@@ -30,7 +31,7 @@ export function AutoMLDashboard({ jobId }: { jobId: string }) {
   });
 
   const startMutation = useMutation({
-    mutationFn: () => startAutoML({ job_id: jobId }),
+    mutationFn: (targetColumn?: string) => startAutoML({ job_id: jobId, target_column: targetColumn }),
     onSuccess: () => {
       toast({ title: "AutoML Started", description: "The execution manifest has been dispatched." });
       refetchStatus();
@@ -41,7 +42,8 @@ export function AutoMLDashboard({ jobId }: { jobId: string }) {
   });
 
   const handleStart = () => {
-    startMutation.mutate();
+    const targetColumn = localStorage.getItem(`target_column_${jobId}`) || undefined;
+    startMutation.mutate(targetColumn);
   };
 
   const isRunning = statusData?.status === "RUNNING";
@@ -128,7 +130,7 @@ export function AutoMLDashboard({ jobId }: { jobId: string }) {
               <CardHeader>
                   <CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5 text-blue-500" /> AutoML Execution Report</CardTitle>
               </CardHeader>
-              <CardContent className="prose dark:prose-invert max-w-none">
+              <CardContent className="prose dark:prose-invert max-w-none whitespace-pre-line">
                   <ReactMarkdown>{reportData.report_markdown}</ReactMarkdown>
               </CardContent>
           </Card>
