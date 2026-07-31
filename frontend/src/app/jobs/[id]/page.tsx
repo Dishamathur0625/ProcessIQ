@@ -334,9 +334,23 @@ export default function ResultsDashboard() {
                             <p className="text-sm text-zinc-500">Markdown Format</p>
                         </div>
                     </CardHeader>
-                    <CardContent>
-                        <Button variant="outline" className="w-full">Download Report</Button>
-                    </CardContent>
+                        <Button 
+                            variant="outline" 
+                            className="w-full"
+                            disabled={!reports?.content}
+                            onClick={() => {
+                                if (!reports?.content) return;
+                                const blob = new Blob([reports.content], { type: "text/markdown" });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = `pipeline_report_${jobId}.md`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                            }}
+                        >
+                            Download Report
+                        </Button>
                 </Card>
             </div>
         </TabsContent>
