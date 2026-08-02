@@ -3,7 +3,7 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getJobStatus } from "@/services/job";
-import { getReports, getVisualizations, getDownloadUrl } from "@/services/artifact";
+import { getReports, getVisualizations, getDownloadUrl, getEdaStats } from "@/services/artifact";
 import { useParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,6 +14,7 @@ import ReactMarkdown from "react-markdown";
 import { CopilotDrawer } from "@/components/copilot/CopilotDrawer";
 import { PredictionPlanner } from "@/components/planner/PredictionPlanner";
 import { AutoMLDashboard } from "@/components/automl/AutoMLDashboard";
+import { CopilotDataPrep } from "@/components/copilot/CopilotDataPrep";
 
 // Plotly needs to be dynamically imported to avoid SSR issues
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
@@ -149,7 +150,7 @@ function parseReport(content: string) {
 export default function ResultsDashboard() {
   const { id } = useParams();
   const jobId = id as string;
-  const [activeTab, setActiveTab] = React.useState("visualizations");
+  const [activeTab, setActiveTab] = React.useState("interactive-prep");
 
   const { data: job } = useQuery({
     queryKey: ["jobStatus", jobId],
@@ -168,6 +169,12 @@ export default function ResultsDashboard() {
     enabled: job?.status === "COMPLETED"
   });
 
+  const { data: edaStats } = useQuery({
+    queryKey: ["edaStats", jobId],
+    queryFn: () => getEdaStats(jobId),
+    enabled: job?.status === "COMPLETED"
+  });
+
   if (job?.status !== "COMPLETED") {
       return (
           <div className="flex flex-col items-center justify-center pt-20 space-y-4">
@@ -181,7 +188,7 @@ export default function ResultsDashboard() {
   const downloadUrl = getDownloadUrl(jobId);
   const vizData = visualizations?.content_json || visualizations;
   
-  let plotObj: any = null;
+  let plots: any[] = [];
   if (vizData) {
     let parsedData = vizData;
     if (typeof vizData === "string") {
@@ -191,28 +198,39 @@ export default function ResultsDashboard() {
         console.error("Failed to parse visualizations JSON:", e);
       }
     }
+    
     if (parsedData) {
-      // Check for plotly_json nested structure
-      let rawPlot = parsedData.plotly_json || parsedData;
-      if (typeof rawPlot === "string") {
-        try {
-          rawPlot = JSON.parse(rawPlot);
-        } catch (e) {
-          console.error("Failed to parse plotly_json string:", e);
+      if (Array.isArray(parsedData)) {
+        plots = parsedData.map(p => {
+           let rawPlot = p.plotly_json || p;
+           if (typeof rawPlot === "string") {
+             try { rawPlot = JSON.parse(rawPlot); } catch (e) {}
+           }
+           return rawPlot;
+        });
+      } else {
+        let rawPlot = parsedData.plotly_json || parsedData;
+        if (typeof rawPlot === "string") {
+          try {
+            rawPlot = JSON.parse(rawPlot);
+          } catch (e) {
+            console.error("Failed to parse plotly_json string:", e);
+          }
         }
-      }
-      
-      if (rawPlot) {
-        if (rawPlot.data) {
-          plotObj = rawPlot;
-        } else {
-          const keys = Object.keys(rawPlot);
-          if (keys.length > 0) {
-            plotObj = rawPlot[keys[0]];
-            if (typeof plotObj === "string") {
-              try {
-                plotObj = JSON.parse(plotObj);
-              } catch (e) {}
+        
+        if (rawPlot) {
+          if (rawPlot.data) {
+            plots = [rawPlot];
+          } else {
+            const keys = Object.keys(rawPlot);
+            if (keys.length > 0) {
+              let plotObj = rawPlot[keys[0]];
+              if (typeof plotObj === "string") {
+                try {
+                  plotObj = JSON.parse(plotObj);
+                } catch (e) {}
+              }
+              plots = [plotObj];
             }
           }
         }
@@ -257,7 +275,8 @@ export default function ResultsDashboard() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5 mb-8">
+        <TabsList className="grid w-full grid-cols-6 mb-8">
+          <TabsTrigger value="interactive-prep">Interactive Prep</TabsTrigger>
           <TabsTrigger value="visualizations">Visualizations</TabsTrigger>
           <TabsTrigger value="reports">Reports & Quality</TabsTrigger>
           <TabsTrigger value="planner">Prediction Planner</TabsTrigger>
@@ -265,28 +284,74 @@ export default function ResultsDashboard() {
           <TabsTrigger value="downloads">Download Center</TabsTrigger>
         </TabsList>
         
-        <TabsContent value="visualizations" className="space-y-4">
-            <Card>
-                <CardHeader>
-                    <CardTitle>Distribution Analysis</CardTitle>
-                </CardHeader>
-                <CardContent className="flex justify-center min-h-[400px]">
-                    {plotObj?.data ? (
-                        <Plot
-                            data={plotObj.data}
-                            layout={{
-                                ...plotObj.layout, 
-                                width: undefined, // Let it be responsive if possible
-                                autosize: true
-                            }}
-                            useResizeHandler={true}
-                            style={{width: "100%", height: "400px"}}
-                        />
-                    ) : (
-                        <p className="text-zinc-500 pt-10">No visualizations generated for this pipeline run.</p>
-                    )}
-                </CardContent>
-            </Card>
+        <TabsContent value="interactive-prep" className="space-y-4">
+            <CopilotDataPrep jobId={jobId} />
+        </TabsContent>
+        
+        <TabsContent value="visualizations" className="space-y-8">
+            {edaStats && edaStats.columns && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Tabular Data Statistics</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="overflow-x-auto border dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-950 shadow-sm">
+                            <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800">
+                                <thead className="bg-zinc-50/70 dark:bg-zinc-900/50">
+                                    <tr>
+                                        <th className="px-6 py-3.5 text-left text-xs font-bold text-zinc-500 uppercase">Column</th>
+                                        <th className="px-6 py-3.5 text-left text-xs font-bold text-zinc-500 uppercase">Mean</th>
+                                        <th className="px-6 py-3.5 text-left text-xs font-bold text-zinc-500 uppercase">Median</th>
+                                        <th className="px-6 py-3.5 text-left text-xs font-bold text-zinc-500 uppercase">Mode</th>
+                                        <th className="px-6 py-3.5 text-left text-xs font-bold text-zinc-500 uppercase">Missing Values</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                                    {Object.entries(edaStats.columns).map(([colName, stats]: [string, any], idx) => (
+                                        <tr key={idx} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors">
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">{colName}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm">{stats.mean !== undefined && stats.mean !== null ? Number(stats.mean).toFixed(2) : '-'}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm">{stats.median !== undefined && stats.median !== null ? Number(stats.median).toFixed(2) : '-'}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm">{stats.mode !== undefined && stats.mode !== null ? String(stats.mode) : '-'}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-red-500">{stats.nulls || 0}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {plots.length > 0 ? (
+                    plots.map((plot, idx) => (
+                        <Card key={idx}>
+                            <CardHeader>
+                                <CardTitle>{plot.layout?.title?.text || "Visualization"}</CardTitle>
+                            </CardHeader>
+                            <CardContent className="flex justify-center min-h-[400px]">
+                                <Plot
+                                    data={plot.data}
+                                    layout={{
+                                        ...plot.layout, 
+                                        width: undefined,
+                                        autosize: true
+                                    }}
+                                    useResizeHandler={true}
+                                    style={{width: "100%", height: "400px"}}
+                                />
+                            </CardContent>
+                        </Card>
+                    ))
+                ) : (
+                    <Card className="col-span-1 md:col-span-2">
+                        <CardContent className="flex justify-center items-center min-h-[400px]">
+                            <p className="text-zinc-500">No visualizations generated for this pipeline run.</p>
+                        </CardContent>
+                    </Card>
+                )}
+            </div>
         </TabsContent>
 
         <TabsContent value="reports" className="space-y-4">

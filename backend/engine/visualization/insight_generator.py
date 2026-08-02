@@ -19,19 +19,24 @@ class InsightGenerator:
             
         skewness = data.skew()
         
+        mean_val = data.mean()
+        median_val = data.median()
+        std_val = data.std()
+        stats_str = f"Mean = {mean_val:.2f}, Median = {median_val:.2f}, Std = {std_val:.2f}, Skew = {skewness:.2f}"
+        
         if skewness > 1.0:
             finding = f"Right-skew detected in {column}"
-            evidence = f"Skewness = {skewness:.2f}"
+            evidence = stats_str
             impact = "Model may underestimate higher values."
             recommendation = "Consider applying a log-transform or Box-Cox transform."
         elif skewness < -1.0:
             finding = f"Left-skew detected in {column}"
-            evidence = f"Skewness = {skewness:.2f}"
+            evidence = stats_str
             impact = "Model may underestimate lower values."
             recommendation = "Consider applying a power transform."
         else:
             finding = f"Normal distribution approximated for {column}"
-            evidence = f"Skewness = {skewness:.2f}"
+            evidence = stats_str
             impact = "Ideal for linear models."
             recommendation = "No transformation needed."
             

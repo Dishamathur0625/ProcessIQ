@@ -5,7 +5,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Button } from "@/components/ui/button";
 import { Bot, Sparkles, AlertCircle, Play } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
-import { understandDataset, suggestPipeline, CopilotRequestPayload } from "@/services/copilot";
+import { understandDataset, suggestPipeline, interactiveTransform, CopilotRequestPayload } from "@/services/copilot";
 import { runPipeline } from "@/services/job";
 import { useToast } from "@/components/ui/use-toast";
 import ReactMarkdown from "react-markdown";
@@ -13,6 +13,7 @@ import ReactMarkdown from "react-markdown";
 export function CopilotDrawer({ jobId }: { jobId: string }) {
   const [insight, setInsight] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [intent, setIntent] = useState("");
   const { toast } = useToast();
 
   const handleUnderstand = async () => {
@@ -38,6 +39,29 @@ export function CopilotDrawer({ jobId }: { jobId: string }) {
       toast({ title: "Copilot Error", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleTransform = async () => {
+    if (!intent) return;
+    setLoading(true);
+    setInsight(null);
+    try {
+      // In a real app we'd resolve actual dataset paths from job metadata
+      const payload = {
+        job_id: jobId,
+        user_intent: intent,
+        dataset_path: "data/sample_input/dataset.xlsx",
+        output_path: "data/processed/output.xlsx"
+      };
+      const data = await interactiveTransform(payload);
+      setInsight({ type: "transform", data });
+      toast({ title: "Transformation Applied", description: "Dataset has been successfully modified." });
+    } catch (err: any) {
+      toast({ title: "Execution Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+      setIntent("");
     }
   };
 
@@ -79,6 +103,20 @@ export function CopilotDrawer({ jobId }: { jobId: string }) {
           </Button>
           <Button variant="outline" onClick={handleSuggest} disabled={loading}>
             Suggest Pipeline
+          </Button>
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          <input 
+            type="text"
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            placeholder="E.g., Pivot plant data based on variable column" 
+            value={intent}
+            onChange={(e) => setIntent(e.target.value)}
+            disabled={loading}
+          />
+          <Button variant="default" onClick={handleTransform} disabled={loading || !intent}>
+            Apply Transform
           </Button>
         </div>
 
@@ -139,6 +177,20 @@ export function CopilotDrawer({ jobId }: { jobId: string }) {
                 <Play className="w-4 h-4 mr-2" />
                 Run Suggested Pipeline
               </Button>
+            </div>
+          )}
+
+          {insight?.type === "transform" && (
+            <div className="space-y-4 p-4 bg-zinc-50 dark:bg-zinc-900 rounded-lg border">
+              <h3 className="font-bold text-lg text-emerald-700 dark:text-emerald-400">Transformation Successful</h3>
+              <p className="text-sm text-zinc-700 dark:text-zinc-300">{insight.data.explanation}</p>
+              
+              <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-md border border-emerald-100 dark:border-emerald-900 mt-4">
+                <h4 className="font-semibold text-emerald-800 dark:text-emerald-300 mb-2">Executed Pandas Code</h4>
+                <pre className="text-xs text-emerald-700 dark:text-emerald-400 overflow-x-auto whitespace-pre-wrap">
+                  {insight.data.python_code}
+                </pre>
+              </div>
             </div>
           )}
         </div>

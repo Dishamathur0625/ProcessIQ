@@ -111,17 +111,29 @@ def execute_pipeline_task(self, job_id: str, configuration: dict):
         
         # 3. Dynamic Pipeline configuration
         ops = []
+        
+        is_plant_data = False
+        from backend.engine.cleaning.preprocessors.plant_data_aligner import PlantDataAligner
+        plant_aligner = PlantDataAligner()
+        if plant_aligner.validate(df):
+            is_plant_data = True
+            ops.append(plant_aligner)
+            
         if configuration.get("cleaning"):
             ops.append(RemoveDuplicates())
-            numeric_cols = df.select_dtypes(include='number').columns.tolist()
-            if numeric_cols:
-                ops.append(MeanImputation(target_columns=numeric_cols))
+            ops.append(MeanImputation())
                 
         if configuration.get("feature_engineering"):
-            numeric_cols = df.select_dtypes(include='number').columns.tolist()
-            if numeric_cols:
-                ops.append(MinMaxScaler(target_columns=numeric_cols))
+            # Skip scaling for plant data as users want original values
+            if not is_plant_data:
+                ops.append(MinMaxScaler())
                 
+            # Categorical encoding shouldn't be strictly configured based on initial df
+            # because the dataframe might change. We'll use OneHotEncoderGenerator with no targets
+            # wait, OneHotEncoderGenerator requires target_columns if we want to restrict to low_card
+            # I will keep the explicit logic but we should evaluate it AFTER PlantDataAligner if possible
+            # Actually, I'll let OneHotEncoderGenerator handle it dynamically if possible. Let me check its code.
+            # I will just keep the original logic for categorical for now, as PlantDataAligner doesn't create new categorical columns, it only creates numeric columns.
             cat_cols = [col for col in df.columns if df[col].dtype == 'object' or df[col].dtype == 'category']
             low_card_cats = [col for col in cat_cols if 1 < df[col].nunique() <= 20]
             if low_card_cats:
@@ -158,18 +170,23 @@ def execute_pipeline_task(self, job_id: str, configuration: dict):
         
         # 7. Generate Visualizations
         if configuration.get("visualization"):
-            # Quick hack to get visualizations for first numeric column
-            numeric_cols = final_df.select_dtypes(include='number').columns.tolist()
-            if numeric_cols:
-                viz_spec = VisualizationSpecificationGenerator.generate_spec(final_df, [numeric_cols[0]])
-                viz_json = viz_spec.dict() if viz_spec else {}
-                art_viz = PipelineArtifact(
-                    job_id=job_id,
-                    artifact_type="VISUALIZATION",
-                    name=f"dist_{numeric_cols[0]}",
-                    content_json=viz_json
-                )
-                db.add(art_viz)
+            # We want to generate an entire suite of visualizations for the frontend
+            # including correlations, distributions, and scatterplots.
+            # If the user specified a target variable for AutoML in configuration, we'd use it, 
+            # otherwise we just generate a general suite.
+            target = configuration.get("automl_target") # (if available)
+            viz_suite = VisualizationSpecificationGenerator.generate_suite_for_dataset(final_df, target_variable=target)
+            
+            # Convert list of pydantic models to dicts
+            viz_json = [spec.dict() for spec in viz_suite]
+            
+            art_viz = PipelineArtifact(
+                job_id=job_id,
+                artifact_type="VISUALIZATION",
+                name="visualizations_suite",
+                content_json=viz_json
+            )
+            db.add(art_viz)
                 
         # 7.5 Save Feature Metadata, Quality Report, Fingerprint for the Prediction Planner
         feature_metadata, quality_report, fingerprint = generate_metadata_artifacts(final_df, job_id)

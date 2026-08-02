@@ -8,3 +8,7 @@ env/
 .vscode/
 data/processed/
 data/reports/
+
+processiq.db
+storage/
+context/

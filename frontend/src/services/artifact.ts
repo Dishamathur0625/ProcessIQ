@@ -15,3 +15,8 @@ export const getVisualizations = async (jobId: string): Promise<any> => {
 export const getDownloadUrl = (jobId: string): string => {
   return `${API_BASE}/download/${jobId}`;
 };
+
+export const getEdaStats = async (jobId: string): Promise<any> => {
+  const response = await axios.post(`${API_BASE}/copilot/eda-stats`, { job_id: jobId });
+  return response.data;
+};

@@ -34,3 +34,37 @@ class CopilotRequest(BaseModel):
     prompt_id: Optional[str] = None
     question: Optional[str] = None
     context_keys: Optional[List[str]] = None
+
+class InteractiveTransformRequest(BaseModel):
+    job_id: str
+    user_intent: str
+    dataset_path: Optional[str] = None
+    output_path: Optional[str] = None
+
+class InteractiveTransformLLMResponse(BaseModel):
+    python_code: str = Field(description="The executable python pandas code to transform the dataset")
+    explanation: str = Field(description="Explanation of what the code does")
+    success: bool = Field(default=True, description="Whether the code generation was successful")
+
+class InteractiveTransformResponse(BaseModel):
+    python_code: str = Field(description="The executable python pandas code to transform the dataset")
+    explanation: str = Field(description="Explanation of what the code does")
+    success: bool = Field(default=True, description="Whether the code generation was successful")
+    updated_stats: Optional[Dict[str, Any]] = Field(default=None, description="Updated dataset statistics after transformation")
+    before_stats: Optional[Dict[str, Any]] = Field(default=None, description="EDA statistics of the dataset before transformation")
+    output_file: Optional[str] = Field(default=None, description="Storage path of the generated output file")
+    download_url: Optional[str] = Field(default=None, description="URL to download the generated output file")
+    preview_data: Optional[List[Dict[str, Any]]] = Field(default=None, description="Preview of the first few rows of the transformed dataset")
+
+class EDAStatsResponse(BaseModel):
+    job_id: str = Field(description="The job/dataset id the statistics belong to")
+    overview: Dict[str, Any] = Field(description="Dataset-level summary (rows, columns, duplicates, missing cells, ...)")
+    columns: Dict[str, Any] = Field(description="Per-column statistics: mean, median, mode, std, min, max, nulls, unique, ...")
+    source: str = Field(description="Which file the statistics were computed from")
+    generated_at: str = Field(description="ISO timestamp of generation")
+
+class EDAAssistantResponse(BaseModel):
+    question: str = Field(description="A clarifying question the Copilot asks the user about what they want to do with the dataset")
+    suggestions: List[str] = Field(description="Example intents the user could type next")
+    context_summary: str = Field(description="Short summary of what the EDA already revealed about the dataset")
+    references: List[str] = Field(description="Artifacts used to build this response")

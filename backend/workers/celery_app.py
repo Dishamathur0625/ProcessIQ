@@ -18,6 +18,6 @@ celery_app.conf.update(
 )
 
 print(f"\n==================================================")
-print(f"⚙️ Celery Task Runner Started!")
-print(f"📦 STORAGE PROVIDER: {settings.STORAGE_PROVIDER.upper()}")
+print(f"Celery Task Runner Started!")
+print(f"STORAGE PROVIDER: {settings.STORAGE_PROVIDER.upper()}")
 print(f"==================================================\n")

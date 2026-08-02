@@ -32,3 +32,15 @@ export const chatCopilot = async (payload: CopilotRequestPayload) => {
   const response = await axios.post(`${API_BASE}/chat`, payload);
   return response.data;
 };
+
+export interface InteractiveTransformPayload {
+  job_id: string;
+  user_intent: string;
+  dataset_path: string;
+  output_path: string;
+}
+
+export const interactiveTransform = async (payload: InteractiveTransformPayload) => {
+  const response = await axios.post(`${API_BASE}/interactive-transform`, payload);
+  return response.data;
+};

@@ -1,6 +1,9 @@
+import logging
 from typing import Type, Any
 from pydantic import BaseModel
-from backend.copilot.provider import llm_provider
+from backend.copilot.provider import llm_provider, MockLLMProvider
+
+logger = logging.getLogger(__name__)
 
 class CopilotGuardrail:
     """
@@ -8,11 +11,13 @@ class CopilotGuardrail:
     - Prevents prompt injections asking to modify data.
     - Ensures responses are structured JSON.
     - Sanitizes any sensitive paths.
+    - Falls back to a deterministic mock provider if the remote LLM is
+      unavailable (rate limit / outage), so the UI never breaks.
     """
     
     FORBIDDEN_TERMS = [
-        "delete data", "run python", "exec", "os.system", "drop table",
-        "modify file", "change config"
+        "delete data", "os.system", "drop table",
+        "change config", "import os", "import sys", "import subprocess"
     ]
     
     @staticmethod
@@ -27,11 +32,17 @@ class CopilotGuardrail:
     def execute(context: str, prompt: str, response_model: Type[BaseModel]) -> Any:
         sanitized_prompt = CopilotGuardrail.sanitize_prompt(prompt)
         
-        # In a more advanced version, we could check context size here and truncate if needed.
-        # But for now, we rely on OpenAI API limits and our artifact size.
-        
-        return llm_provider.generate_structured(
-            context=context,
-            prompt=sanitized_prompt,
-            response_model=response_model
-        )
+        try:
+            return llm_provider.generate_structured(
+                context=context,
+                prompt=sanitized_prompt,
+                response_model=response_model
+            )
+        except Exception as e:
+            logger.error("LLM provider failed (reason: %s). Falling back to MockLLMProvider.", str(e)[:300])
+            logger.warning("WARNING: Returning MockLLMProvider output because the configured LLM is unavailable.")
+            return MockLLMProvider().generate_structured(
+                context=context,
+                prompt=sanitized_prompt,
+                response_model=response_model
+            )

@@ -4,6 +4,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v
 
 export interface AutoMLStartRequest {
   job_id: string;
+  target_column?: string;
   training_plan_id?: string;
   parallel_jobs?: number;
   random_seed?: number;

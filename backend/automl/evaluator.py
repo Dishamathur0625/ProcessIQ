@@ -30,10 +30,15 @@ class Evaluator:
             
             if y_prob is not None and is_binary:
                 # Use the probability of the positive class
-                if y_prob.ndim == 2:
+                if y_prob.ndim == 2 and y_prob.shape[1] > 1:
                     prob_pos = y_prob[:, 1]
                 else:
                     prob_pos = y_prob
-                metrics["roc_auc"] = float(roc_auc_score(y_true, prob_pos))
+                
+                # Check if y_true has at least 2 classes
+                if len(np.unique(y_true)) > 1:
+                    metrics["roc_auc"] = float(roc_auc_score(y_true, prob_pos))
+                else:
+                    metrics["roc_auc"] = 0.5
                 
         return metrics

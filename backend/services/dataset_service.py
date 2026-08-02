@@ -41,8 +41,10 @@ class DatasetService:
         
         ext = os.path.splitext(file.filename)[1].lower()
         if ext in {".xls", ".xlsx"}:
+            file_content = file.file.read()
+            file_obj = io.BytesIO(file_content)
             try:
-                excel_file = pd.ExcelFile(file.file)
+                excel_file = pd.ExcelFile(file_obj)
                 sheet_names = excel_file.sheet_names
                 if len(sheet_names) > 1:
                     best_sheet = sheet_names[0]
@@ -58,9 +60,10 @@ class DatasetService:
                             continue
                     df = pd.read_excel(excel_file, sheet_name=best_sheet)
                 else:
-                    df = pd.read_excel(file.file)
+                    df = pd.read_excel(file_obj)
             except Exception:
-                df = pd.read_excel(file.file)
+                file_obj.seek(0)
+                df = pd.read_excel(file_obj)
             csv_str = df.to_csv(index=False)
             storage.upload(bucket, path, io.BytesIO(csv_str.encode('utf-8')))
         else:
